@@ -46,7 +46,6 @@ AUTH_URL = '/dna/system/api/v1/auth/token'
 DEVICES_URL = '/dna/intent/api/v1/network-device'
 IMAGE_URL = '/dna/intent/api/v1/image/importation?isTaggedGolden=TRUE'
 
-
 def get_auth_token():
     """Authenticate and receivev x-auth token
        Returns: token: string
@@ -85,8 +84,15 @@ def create_image_device_mapping(images):
     """
     image_mapping = {}
     for image in images:
-        for device_family in image['applicableDevicesForImage']:
-            image_mapping[device_family['productName']] = image['displayVersion']
+        if 'applicableDevicesForImage' in image.keys():
+            for device_family in image['applicableDevicesForImage']:
+                for product_id in device_family['productId']:
+                    version = image['displayVersion']
+                    #horrible hack because SWIM API stores version different to devices API
+                    #and handle None value
+                    if version is not None:
+                        version = version.replace(".0", ".")
+                    image_mapping[product_id] = version if version is not None else ''
     return image_mapping
 
 def create_device_table(devices):
@@ -100,30 +106,32 @@ def create_device_table(devices):
                             'Device Family': device['series'],
                             'Software Type': device['softwareType'],
                             'Software Version': device['softwareVersion'],
-                            'Software Compliant': ''})
+                            'Software Compliant': 'Golden Image Not specified'})
     return device_table
 
 def check_image_compliant(devices,images):
-    """Checks to see whether device matches Golden Image
-    Returns - devices : list of dicts"""
+    """Checks to see whether device type has a Golden image and
+       whether the version matches the Golden Image
+       Returns - devices : list of dicts
+    """
     for device in devices:
-        version = images.get(device['Device Family'])
-        if version is None:
-            device['Software Compliant'] = 'Golden Image Not specified'
-        elif version == device['Software Version']:
-            device['Software Compliant'] = True
+        version = images.get(device['Platform ID'])
+        if version == device['Software Version']:
+            device['Software Compliant'] = 'Compliant'
         else:
-            device['Software Compliant'] = False
+            device['Software Compliant'] = 'Uncompliant'
     return devices
 
 def create_device_report(devices):
     """Generate dataframe from devices list
        Returns - devices_df : dataframe """
     devices_df = pd.DataFrame.from_dict(devices)
+    devices_df.to_csv('inventory.csv', sep=',', encoding='utf-8')
     return devices_df
 
 def create_pie_chart(devices):
-    plot = devices["Software Compliant"].value_counts(normalize=True).plot.pie(autopct='%.1f %%', ylabel='', labeldistance=None, legend=True)
+    """Creates a pie chart based on dataframe and saves in current directory."""
+    plot = devices["Software Compliant"].value_counts(normalize=True).plot.pie(autopct='%.1f %%',title='Software Compliance', ylabel='', labeldistance=None, legend=True)
     plot.figure.savefig('compliance.png')
 
 def main():
@@ -143,8 +151,6 @@ def main():
     device_df = create_device_report(report_table)
     print(device_df)
     create_pie_chart(device_df)
-
-
 
 if __name__ == "__main__":
     main()
