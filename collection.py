@@ -149,8 +149,9 @@ def main():
     devices = create_device_table(response)
     report_table = check_image_compliant(devices,image_family)
     device_df = create_device_report(report_table)
+    # Render image of device compliance
     print(device_df)
     create_pie_chart(device_df)
-
+    
 if __name__ == "__main__":
     main()
